@@ -1,5 +1,3 @@
-#requires -RunAsAdministrator
-
 [CmdletBinding()]
 Param(
   [Parameter(HelpMessage = "Default website hostname")]
@@ -10,30 +8,51 @@ Param(
   [string]$SSLHostname = "ssl.example.local"
 )
 
-Write-Host "Starting container"
-$containerId = docker run -d --name ssl-iis-docker ssl-iis-docker:latest
+Describe "SSL in IIS with Docker" {
+  Context "My Store" {
+    $containerId = ""
+    $ipAddress = ""
 
-Write-Host "Retrieving IP address"
-$ipAddress = docker inspect -f "{{ .NetworkSettings.Networks.nat.IPAddress }}" ssl-iis-docker
-Write-Host "IP: $($ipAddress)"
+    BeforeEach {
+      $containerId = docker run --rm -d ssl-iis-docker:My
+      $ipAddress = docker inspect -f "{{ .NetworkSettings.Networks.nat.IPAddress }}" $containerId
+    }
 
-Write-Host "Performing HTTP test (https://$($Hostname)/))"
-$http = Invoke-WebRequest "http://$($ipAddress)/" -Headers @{ Host = $Hostname; } -UseBasicParsing
-If ($http.StatusCode -eq 200) {
-  Write-Host "HTTP page successfully retrieved."
+    It "Should serve <Protocol>://<HostHeader>" -TestCases @(
+      @{ Protocol = "http"; HostHeader = $Hostname }
+      #@{ Protocol = "https"; HostHeader = $SSLHostname } # Must be installed to Root store, otherwise invalid cert.
+    ) {
+      Param($Protocol, $HostHeader)
+      $response = Invoke-WebRequest "$($Protocol)://$($ipAddress)/" -Headers @{ Host = $HostHeader; } -UseBasicParsing
+      $response | Should -Not -Be $null
+      $response.StatusCode | Should -Be 200
+    }
 
-  Write-Host "Perorming HTTPS test (https://$($SSLHostname)/)"
-  $https = Invoke-WebRequest "https://$($ipAddress)/" -Headers @{ Host = $SSLHostname; } -UseBasicParsing
-  If ($https.StatusCode -eq 200) {
-    Write-Host "HTTPS page sucessfully retrieved."
-  } Else {
-    Write-Warning "HTTPS request failed."
+    AfterEach {
+      docker stop $containerId
+    }
   }
-} Else {
-  Write-Warning "HTTP request failed."
+  Context "Root Store" {
+    $containerId = ""
+    $ipAddress = ""
+
+    BeforeEach {
+      $containerId = docker run --rm -d ssl-iis-docker:Root
+      $ipAddress = docker inspect -f "{{ .NetworkSettings.Networks.nat.IPAddress }}" $containerId
+    }
+
+    It "Should serve <Protocol>://<HostHeader>" -TestCases @(
+      @{ Protocol = "http"; HostHeader = $Hostname },
+      @{ Protocol = "https"; HostHeader = $SSLHostname }
+    ) {
+      Param($Protocol, $HostHeader)
+      $response = Invoke-WebRequest "$($Protocol)://$($ipAddress)/" -Headers @{ Host = $HostHeader; } -UseBasicParsing
+      $response | Should -Not -Be $null
+      $response.StatusCode | Should -Be 200
+    }
+
+    AfterEach {
+      docker stop $containerId
+    }
+  }
 }
-
-Write-Host "Stopping container"
-docker rm -f $containerId
-
-Write-Host "Test complete"
