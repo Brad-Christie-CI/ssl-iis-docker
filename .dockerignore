@@ -1,0 +1,7 @@
+.git/
+appveyor.yml
+Build.ps1
+Dockerfile
+LICENSE
+README.md
+Test.ps1
