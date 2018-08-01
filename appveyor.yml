@@ -1,6 +1,9 @@
 version: 1.0.{build}
 image: Visual Studio 2017
 
+artifacts:
+  - path: cert\DO_NOT_TRUST_Example.pfx
+
 install:
   - ps: Write-Host Server version $(gp 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').BuildLabEx
   - cmd: docker version
